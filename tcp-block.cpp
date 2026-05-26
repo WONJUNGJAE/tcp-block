@@ -61,6 +61,8 @@ uint16_t tcp_len;
  
 pcap_t* handle;
 char* pattern;
+uint8_t my_mac[6];
+int rawSd = -1;
  
 uint16_t checksum(void* data, int len) {
 uint32_t sum = 0;
@@ -76,16 +78,90 @@ sum += (sum >> 16);
 return ~sum;
 }
  
-void get_my_mac(const char* interface, uint8_t* mac) {
+void get_my_mac(const char* interface) {
 int sock = socket(AF_INET, SOCK_DGRAM, 0);
 struct ifreq ifr;
 strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
 ioctl(sock, SIOCGIFHWADDR, &ifr);
-memcpy(mac, ifr.ifr_hwaddr.sa_data, 6);
+memcpy(my_mac, ifr.ifr_hwaddr.sa_data, 6);
 close(sock);
 }
  
-void send_forward(const u_char* org_packet, uint16_t data_size, uint8_t* my_mac) {
+void send_backward(const u_char* org_packet, uint16_t data_size) {
+char* redirect = (char*)"HTTP/1.0 302 Redirect\r\nLocation: http://warning.or.kr\r\n\r\n";
+int redirect_len = strlen(redirect);
+ 
+int buf_size = sizeof(struct EthHdr) + sizeof(struct IpHdr) + sizeof(struct TcpHdr) + redirect_len;
+uint8_t buf[buf_size];
+memset(buf, 0, buf_size);
+ 
+struct EthHdr* org_eth = (struct EthHdr*)org_packet;
+struct IpHdr* org_ip = (struct IpHdr*)(org_packet + sizeof(struct EthHdr));
+struct TcpHdr* org_tcp = (struct TcpHdr*)(org_packet + sizeof(struct EthHdr) + sizeof(struct IpHdr));
+ 
+struct EthHdr* new_eth = (struct EthHdr*)buf;
+struct IpHdr* new_ip = (struct IpHdr*)(buf + sizeof(struct EthHdr));
+struct TcpHdr* new_tcp = (struct TcpHdr*)(buf + sizeof(struct EthHdr) + sizeof(struct IpHdr));
+uint8_t* new_data = buf + sizeof(struct EthHdr) + sizeof(struct IpHdr) + sizeof(struct TcpHdr);
+ 
+memcpy(new_eth->dmac.addr, org_eth->smac.addr, 6);
+memcpy(new_eth->smac.addr, my_mac, 6);
+new_eth->type = org_eth->type;
+ 
+new_ip->vhl = org_ip->vhl;
+new_ip->tos = 0;
+new_ip->len = htons(sizeof(struct IpHdr) + sizeof(struct TcpHdr) + redirect_len);
+new_ip->id = htons(rand() & 0xFFFF);
+new_ip->off = 0;
+new_ip->ttl = 128;
+new_ip->proto = IP_PROTO_TCP;
+new_ip->sum = 0;
+new_ip->sip = org_ip->dip;
+new_ip->dip = org_ip->sip;
+ 
+new_tcp->sport = org_tcp->dport;
+new_tcp->dport = org_tcp->sport;
+new_tcp->seq = org_tcp->ack;
+new_tcp->ack = htonl(ntohl(org_tcp->seq) + data_size);
+new_tcp->off = (sizeof(struct TcpHdr) / 4) << 4;
+new_tcp->flags = TH_FIN | TH_ACK;
+new_tcp->win = org_tcp->win;
+new_tcp->sum = 0;
+new_tcp->urp = 0;
+ 
+memcpy(new_data, redirect, redirect_len);
+ 
+new_ip->sum = checksum(new_ip, sizeof(struct IpHdr));
+ 
+struct PseudoHdr pseudo;
+pseudo.sip = new_ip->sip;
+pseudo.dip = new_ip->dip;
+pseudo.zero = 0;
+pseudo.proto = IP_PROTO_TCP;
+pseudo.tcp_len = htons(sizeof(struct TcpHdr) + redirect_len);
+ 
+int tcp_buf_size = sizeof(struct PseudoHdr) + sizeof(struct TcpHdr) + redirect_len;
+uint8_t tcp_buf[tcp_buf_size];
+memcpy(tcp_buf, &pseudo, sizeof(struct PseudoHdr));
+memcpy(tcp_buf + sizeof(struct PseudoHdr), new_tcp, sizeof(struct TcpHdr) + redirect_len);
+new_tcp->sum = checksum(tcp_buf, tcp_buf_size);
+ 
+struct sockaddr_in dest;
+dest.sin_family = AF_INET;
+dest.sin_port = new_tcp->dport;
+dest.sin_addr.s_addr = new_ip->dip;
+ 
+sendto(rawSd,
+buf + sizeof(struct EthHdr),
+buf_size - sizeof(struct EthHdr),
+0,
+(struct sockaddr*)&dest,
+sizeof(dest));
+ 
+printf("Backward FIN 전송 완료!\n");
+}
+ 
+void send_forward(const u_char* org_packet, uint16_t data_size) {
 int buf_size = sizeof(struct EthHdr) + sizeof(struct IpHdr) + sizeof(struct TcpHdr);
 uint8_t buf[buf_size];
 memset(buf, 0, buf_size);
@@ -105,7 +181,7 @@ new_eth->type = org_eth->type;
 new_ip->vhl = org_ip->vhl;
 new_ip->tos = 0;
 new_ip->len = htons(sizeof(struct IpHdr) + sizeof(struct TcpHdr));
-new_ip->id = 0;
+new_ip->id = htons(rand() & 0xFFFF);
 new_ip->off = 0;
 new_ip->ttl = org_ip->ttl;
 new_ip->proto = IP_PROTO_TCP;
@@ -143,90 +219,6 @@ else
 printf("Forward RST 전송 완료!\n");
 }
  
-void send_backward(const u_char* org_packet, uint16_t data_size, uint8_t* my_mac) {
-char* redirect = (char*)"HTTP/1.0 302 Redirect\r\nLocation: http://warning.or.kr\r\n\r\n";
-int redirect_len = strlen(redirect);
- 
-int buf_size = sizeof(struct EthHdr) + sizeof(struct IpHdr) + sizeof(struct TcpHdr) + redirect_len;
-uint8_t buf[buf_size];
-memset(buf, 0, buf_size);
- 
-struct EthHdr* org_eth = (struct EthHdr*)org_packet;
-struct IpHdr* org_ip = (struct IpHdr*)(org_packet + sizeof(struct EthHdr));
-struct TcpHdr* org_tcp = (struct TcpHdr*)(org_packet + sizeof(struct EthHdr) + sizeof(struct IpHdr));
- 
-struct EthHdr* new_eth = (struct EthHdr*)buf;
-struct IpHdr* new_ip = (struct IpHdr*)(buf + sizeof(struct EthHdr));
-struct TcpHdr* new_tcp = (struct TcpHdr*)(buf + sizeof(struct EthHdr) + sizeof(struct IpHdr));
-uint8_t* new_data = buf + sizeof(struct EthHdr) + sizeof(struct IpHdr) + sizeof(struct TcpHdr);
- 
-memcpy(new_eth->dmac.addr, org_eth->smac.addr, 6);
-memcpy(new_eth->smac.addr, my_mac, 6);
-new_eth->type = org_eth->type;
- 
-new_ip->vhl = org_ip->vhl;
-new_ip->tos = 0;
-new_ip->len = htons(sizeof(struct IpHdr) + sizeof(struct TcpHdr) + redirect_len);
-new_ip->id = 0;
-new_ip->off = 0;
-new_ip->ttl = 128;
-new_ip->proto = IP_PROTO_TCP;
-new_ip->sum = 0;
-new_ip->sip = org_ip->dip;
-new_ip->dip = org_ip->sip;
- 
-new_tcp->sport = org_tcp->dport;
-new_tcp->dport = org_tcp->sport;
-new_tcp->seq = org_tcp->ack;
-new_tcp->ack = htonl(ntohl(org_tcp->seq) + data_size);
-new_tcp->off = (sizeof(struct TcpHdr) / 4) << 4;
-new_tcp->flags = TH_FIN | TH_ACK;
-new_tcp->win = org_tcp->win;
-new_tcp->sum = 0;
-new_tcp->urp = 0;
- 
-memcpy(new_data, redirect, redirect_len);
- 
-new_ip->sum = checksum(new_ip, sizeof(struct IpHdr));
- 
-struct PseudoHdr pseudo;
-pseudo.sip = new_ip->sip;
-pseudo.dip = new_ip->dip;
-pseudo.zero = 0;
-pseudo.proto = IP_PROTO_TCP;
-pseudo.tcp_len = htons(sizeof(struct TcpHdr) + redirect_len);
- 
-int tcp_buf_size = sizeof(struct PseudoHdr) + sizeof(struct TcpHdr) + redirect_len;
-uint8_t tcp_buf[tcp_buf_size];
-memcpy(tcp_buf, &pseudo, sizeof(struct PseudoHdr));
-memcpy(tcp_buf + sizeof(struct PseudoHdr), new_tcp, sizeof(struct TcpHdr) + redirect_len);
-new_tcp->sum = checksum(tcp_buf, tcp_buf_size);
- 
-int sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-if (sock < 0) {
-perror("raw socket 생성 실패");
-return;
-}
- 
-int one = 1;
-setsockopt(sock, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
- 
-struct sockaddr_in dest;
-dest.sin_family = AF_INET;
-dest.sin_port = new_tcp->dport;
-dest.sin_addr.s_addr = new_ip->dip;
- 
-sendto(sock,
-buf + sizeof(struct EthHdr),
-buf_size - sizeof(struct EthHdr),
-0,
-(struct sockaddr*)&dest,
-sizeof(dest));
- 
-close(sock);
-printf("Backward FIN 전송 완료!\n");
-}
- 
 void callback(u_char* user,
 const struct pcap_pkthdr* header,
 const u_char* packet) {
@@ -248,11 +240,8 @@ if (memmem(data, data_size, pattern, strlen(pattern)) == NULL) return;
  
 printf("패턴 발견! 차단 시작!\n");
  
-uint8_t my_mac[6];
-get_my_mac((char*)user, my_mac);
- 
-send_forward(packet, data_size, my_mac);
-send_backward(packet, data_size, my_mac);
+send_backward(packet, data_size);
+send_forward(packet, data_size);
 }
  
 int main(int argc, char* argv[]) {
@@ -264,8 +253,18 @@ return 1;
 char* interface = argv[1];
 pattern = argv[2];
  
+get_my_mac(interface);
+ 
+rawSd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+if (rawSd < 0) {
+perror("raw socket 생성 실패");
+return 1;
+}
+int one = 1;
+setsockopt(rawSd, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
+ 
 char errbuf[PCAP_ERRBUF_SIZE];
-handle = pcap_open_live(interface, BUFSIZ, 1, 1000, errbuf);
+handle = pcap_open_live(interface, BUFSIZ, 1, 1, errbuf);
 if (handle == NULL) {
 printf("pcap 열기 실패: %s\n", errbuf);
 return 1;
@@ -274,6 +273,7 @@ return 1;
 printf("캡처 시작! interface=%s pattern=%s\n", interface, pattern);
 pcap_loop(handle, 0, callback, (u_char*)interface);
  
+close(rawSd);
 pcap_close(handle);
 return 0;
 }
