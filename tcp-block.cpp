@@ -62,7 +62,7 @@ uint16_t tcp_len;
 pcap_t* handle;
 char* pattern;
 uint8_t my_mac[6];
-int rawSd = -1;
+int rawSocket = -1;
  
 uint16_t checksum(void* data, int len) {
 uint32_t sum = 0;
@@ -151,7 +151,7 @@ dest.sin_family = AF_INET;
 dest.sin_port = new_tcp->dport;
 dest.sin_addr.s_addr = new_ip->dip;
  
-sendto(rawSd,
+sendto(rawSocket,
 buf + sizeof(struct EthHdr),
 buf_size - sizeof(struct EthHdr),
 0,
@@ -255,13 +255,13 @@ pattern = argv[2];
  
 get_my_mac(interface);
  
-rawSd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-if (rawSd < 0) {
+rawSocket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+if (rawSocket < 0) {
 perror("raw socket 생성 실패");
 return 1;
 }
 int one = 1;
-setsockopt(rawSd, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
+setsockopt(rawSocket, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
  
 char errbuf[PCAP_ERRBUF_SIZE];
 handle = pcap_open_live(interface, BUFSIZ, 1, 1, errbuf);
@@ -273,7 +273,7 @@ return 1;
 printf("캡처 시작! interface=%s pattern=%s\n", interface, pattern);
 pcap_loop(handle, 0, callback, (u_char*)interface);
  
-close(rawSd);
+close(rawSocket);
 pcap_close(handle);
 return 0;
 }
