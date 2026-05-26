@@ -1,1 +1,13 @@
 # tcp-block
+
+
+## 코멘트
+
+처음 영상을 찍었을때 클라이언트를 담당하는 터미널에서 정상적으로 종료가 되고 중간 패킷 보내는 담당 터미널에서 패턴 캡쳐하고 패킷 보냈다 라는게 잘 떴는데 클라이언트쪽 터미널에서 온 메세지를 확인해보니 우리가 보낸 패킷 때문에 종료된게 아니라 서버에서 끊어버린거 때문에 종료된거였다 (wireshark로 패킷 캡쳐해보니 우리가 보내는 FIN보다 서버가 끊는게 먼저 도착)   
+
+그래서 기존코드에서 소켓 생성 시간, timeout 시간, forward 보다 backward 먼저 실행시키기 이렇게 3가지를 수정했더니 이번에는 아래 영상처럼 정상적으로 location에 korea.ac.kr이 아닌 warning.or.kr 즉 우리가 보낸 패킷 때문에 끊어지는게 제대로 나왔다
+
+
+## 실행영상
+
+<video src="https://private-user-images.githubusercontent.com/210666361/598245710-4452ccf9-d96d-4bad-a677-848f33a5ef87.mp4?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Nzk4MDUzOTEsIm5iZiI6MTc3OTgwNTA5MSwicGF0aCI6Ii8yMTA2NjYzNjEvNTk4MjQ1NzEwLTQ0NTJjY2Y5LWQ5NmQtNGJhZC1hNjc3LTg0OGYzM2E1ZWY4Ny5tcDQ_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BS0lBVkNPRFlMU0E1M1BRSzRaQSUyRjIwMjYwNTI2JTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI2MDUyNlQxNDE4MTFaJlgtQW16LUV4cGlyZXM9MzAwJlgtQW16LVNpZ25hdHVyZT0wNjI1MThjN2U4NWU0YTdkZmFiZGQzZjlkMTgyOWYzYTA2NGQ5NWNlMWQ4YmFhMjlmZjI4MjI4OGQ5OTEwNzg3JlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCZyZXNwb25zZS1jb250ZW50LXR5cGU9dmlkZW8lMkZtcDQifQ.mgyFnl4-YZgG0mLU5_fYoAOE47y2lBAHOBIPdznh004" controls></video>
