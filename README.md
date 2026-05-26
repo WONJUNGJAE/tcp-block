@@ -5,7 +5,10 @@
 
 처음 영상을 찍었을때 클라이언트를 담당하는 터미널에서 정상적으로 종료가 되고 중간 패킷 보내는 담당 터미널에서 패턴 캡쳐하고 패킷 보냈다 라는게 잘 떴는데 클라이언트쪽 터미널에서 온 메세지를 확인해보니 우리가 보낸 패킷 때문에 종료된게 아니라 서버에서 끊어버린거 때문에 종료된거였다 (wireshark로 패킷 캡쳐해보니 우리가 보내는 FIN보다 서버가 끊는게 먼저 도착)   
 
-그래서 기존코드에서 소켓 생성 시간, timeout 시간, forward 보다 backward 먼저 실행시키기 이렇게 3가지를 수정했더니 이번에는 아래 영상처럼 정상적으로 location에 korea.ac.kr이 아닌 warning.or.kr 즉 우리가 보낸 패킷 때문에 끊어지는게 제대로 나왔다
+그래서 기존코드에서 소켓 생성 시간, timeout 시간, forward 보다 backward 먼저 실행시키기 이렇게 3가지를 수정했더니 이번에는 아래 영상처럼 정상적으로 location에 korea.ac.kr이 아닌 warning.or.kr 즉 우리가 보낸 패킷 때문에 끊어지는게 제대로 나왔다  
+
+![](https://private-user-images.githubusercontent.com/210666361/598261575-beb55a36-b676-47d1-889e-aa45679e0bf6.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Nzk4MDY5OTEsIm5iZiI6MTc3OTgwNjY5MSwicGF0aCI6Ii8yMTA2NjYzNjEvNTk4MjYxNTc1LWJlYjU1YTM2LWI2NzYtNDdkMS04ODllLWFhNDU2NzllMGJmNi5wbmc_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BS0lBVkNPRFlMU0E1M1BRSzRaQSUyRjIwMjYwNTI2JTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI2MDUyNlQxNDQ0NTFaJlgtQW16LUV4cGlyZXM9MzAwJlgtQW16LVNpZ25hdHVyZT1mNTUzNjFjY2Q5OTc2Y2RiMzc1NzY5NmQzMTZlYmI4ZWI0MjY5ZTUzMmRhODU3ZDgwM2EzMmQ3Yzc5ZDg4OTVlJlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCZyZXNwb25zZS1jb250ZW50LXR5cGU9aW1hZ2UlMkZwbmcifQ.f6pSGmeP5gNE4wY7Rx8_7WOBu_qHofCbA8wyxWOKaGo)
+
 
 
 ## 실행영상
